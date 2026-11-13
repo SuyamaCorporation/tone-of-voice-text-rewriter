@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>文章トーン書き換えツール</title>
+<script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100 min-h-screen">
+<div class="max-w-3xl mx-auto p-4">
+  <h1 class="text-2xl font-bold text-center text-gray-800 mt-6 mb-1">文章トーン書き換えツール</h1>
+  <p class="text-center text-gray-500 mb-6 text-sm">6トーンにワンクリック変換 + 差分ハイライト</p>
+
+  <div class="bg-white rounded-xl shadow p-5 mb-5">
+    <label for="input-text" class="block font-semibold text-gray-700 mb-2">元の文章</label>
+    <textarea id="input-text" rows="5" placeholder="変換したい文章を入力してください..." class="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:border-indigo-400 resize-none text-gray-800"></textarea>
+    <div class="flex justify-end mt-2">
+      <span id="char-count" class="text-xs text-gray-400">0文字</span>
+    </div>
+  </div>
+
+  <div class="grid grid-cols-3 gap-2 mb-5">
+    <button data-tone="formal" aria-label="フォーマルトーンに変換" class="tone-btn bg-blue-600 hover:bg-blue-700 text-white py-2 rounded-lg text-sm font-medium transition-colors">📋 フォーマル</button>
+    <button data-tone="casual" aria-label="カジュアルトーンに変換" class="tone-btn bg-green-500 hover:bg-green-600 text-white py-2 rounded-lg text-sm font-medium transition-colors">😊 カジュアル</button>
+    <button data-tone="assertive" aria-label="断定的トーンに変換" class="tone-btn bg-red-600 hover:bg-red-700 text-white py-2 rounded-lg text-sm font-medium transition-colors">💪 断定的</button>
+    <button data-tone="humble" aria-label="謙虚トーンに変換" class="tone-btn bg-purple-500 hover:bg-purple-600 text-white py-2 rounded-lg text-sm font-medium transition-colors">🙏 謙虚</button>
+    <button data-tone="enthusiastic" aria-label="熱狂的トーンに変換" class="tone-btn bg-orange-500 hover:bg-orange-600 text-white py-2 rounded-lg text-sm font-medium transition-colors">🔥 熱狂的</button>
+    <button data-tone="technical" aria-label="技術的トーンに変換" class="tone-btn bg-gray-700 hover:bg-gray-800 text-white py-2 rounded-lg text-sm font-medium transition-colors">⚙️ 技術的</button>
+  </div>
+
+  <div id="result-panel" class="hidden bg-white rounded-xl shadow p-5 mb-5">
+    <div class="flex justify-between items-center mb-3">
+      <h2 class="font-bold text-gray-700">変換結果: <span id="tone-label" class="text-indigo-600"></span></h2>
+      <button id="copy-result-btn" aria-label="変換結果をコピー" class="text-xs bg-indigo-100 hover:bg-indigo-200 text-indigo-700 px-3 py-1 rounded-lg">コピー</button>
+    </div>
+    <div id="result-text" class="text-gray-800 leading-relaxed mb-5"></div>
+
+    <h3 class="font-semibold text-gray-600 text-sm mb-2">差分ハイライト</h3>
+    <div id="diff-view" class="text-sm leading-relaxed bg-gray-50 rounded-lg p-3"></div>
+    <div class="flex gap-4 mt-2 text-xs text-gray-500">
+      <span><span class="bg-red-100 text-red-700 px-1 rounded">削除</span> 元の文章から変更された箇所</span>
+      <span><span class="bg-green-100 text-green-700 px-1 rounded">追加</span> 変換後に加わった箇所</span>
+    </div>
+  </div>
+
+  <div class="bg-white rounded-xl shadow p-5">
+    <h3 class="font-semibold text-gray-700 mb-3 text-sm">変換ルール参照</h3>
+    <div class="grid grid-cols-2 gap-2 text-xs text-gray-600">
+      <div class="bg-blue-50 rounded-lg p-2"><strong class="text-blue-700">フォーマル</strong>: 敬語強化・「です/ます」統一・口語表現排除</div>
+      <div class="bg-green-50 rounded-lg p-2"><strong class="text-green-700">カジュアル</strong>: 「だよ/ね/よ」語尾・親しみやすい言葉選び</div>
+      <div class="bg-red-50 rounded-lg p-2"><strong class="text-red-700">断定的</strong>: 「〜はずだ/〜に違いない/〜だ」断言表現</div>
+      <div class="bg-purple-50 rounded-lg p-2"><strong class="text-purple-700">謙虚</strong>: 「〜と思われます/〜かもしれません」控えめ表現</div>
+      <div class="bg-orange-50 rounded-lg p-2"><strong class="text-orange-700">熱狂的</strong>: 感嘆符多用・「素晴らしい/革命的/最高」の強調語</div>
+      <div class="bg-gray-100 rounded-lg p-2"><strong class="text-gray-700">技術的</strong>: 専門用語・数値・論理的接続詞の活用</div>
+    </div>
+  </div>
+</div>
+
+<script>
+function escapeHtml(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');}
+
+const KEY = 'app_tone-of-voice-text-rewriter';
+let saved = JSON.parse(localStorage.getItem(KEY) || '{"input":""}');
+
+const inputEl = document.getElementById('input-text');
+inputEl.value = saved.input || '';
+document.getElementById('char-count').textContent = inputEl.value.length + '文字';
+
+inputEl.addEventListener('input', () => {
+  saved.input = inputEl.value;
+  localStorage.setItem(KEY, JSON.stringify(saved));
+  document.getElementById('char-count').textContent = inputEl.value.length + '文字';
+});
+
+const TONE_LABELS = {
+  formal: 'フォーマル', casual: 'カジュアル', assertive: '断定的',
+  humble: '謙虚', enthusiastic: '熱狂的', technical: '技術的'
+};
+
+const TONE_RULES = {
+  formal: (t) => {
+    return t
+      .replace(/だよ|だね|だよね/g, 'です')
+      .replace(/だろ|だろう/g, 'でしょう')
+      .replace(/やっぱり/g, 'やはり')
+      .replace(/すごい/g, '非常に優れた')
+      .replace(/ちょっと/g, '少し')
+      .replace(/いい/g, '良い')
+      .replace(/わかる/g, '理解できる')
+      .replace(/やる/g, '実施する')
+      .replace(/使う/g, '使用する')
+      .replace(/だ。/g, 'です。')
+      .replace(/だ$/g, 'です')
+      .replace(/思う/g, '考えます')
+      .replace(/〜/g, 'について');
+  },
+  casual: (t) => {
+    return t
+      .replace(/です。/g, 'だよ。')
+      .replace(/ます。/g, 'るよ。')
+      .replace(/でしょう/g, 'だよね')
+      .replace(/しかしながら/g, 'でもさ')
+      .replace(/非常に/g, 'めちゃ')
+      .replace(/使用する/g, '使う')
+      .replace(/実施する/g, 'やる')
+      .replace(/考えます/g, '思うんだけど')
+      .replace(/ください/g, 'ね')
+      .replace(/おります/g, 'いるよ');
+  },
+  assertive: (t) => {
+    return t
+      .replace(/かもしれません/g, 'に違いない')
+      .replace(/と思います/g, 'だ')
+      .replace(/でしょう/g, 'である')
+      .replace(/ではないでしょうか/g, 'だ')
+      .replace(/〜かと/g, '〜であることは明白だ')
+      .replace(/おそらく/g, '確実に')
+      .replace(/可能性があります/g, 'はずだ')
+      .replace(/検討します/g, '実行する')
+      .replace(/努力します/g, '必ず達成する')
+      .replace(/です。/g, 'だ。');
+  },
+  humble: (t) => {
+    return t
+      .replace(/だ。/g, 'かもしれません。')
+      .replace(/です。/g, 'と思われます。')
+      .replace(/確実に/g, 'おそらく')
+      .replace(/必ず/g, 'できれば')
+      .replace(/最高だ/g, '良いのではないかと感じます')
+      .replace(/実行する/g, '取り組んでまいりたいと存じます')
+      .replace(/思います/g, '思う次第でございます')
+      .replace(/します/g, 'させていただきます')
+      .replace(/いいます/g, '申し上げます');
+  },
+  enthusiastic: (t) => {
+    return t
+      .replace(/良い/g, '素晴らしい')
+      .replace(/大切/g, '最重要')
+      .replace(/変化/g, '革命的変化')
+      .replace(/効果/g, '驚異的な効果')
+      .replace(/です。/g, 'です！')
+      .replace(/ます。/g, 'ます！')
+      .replace(/だ。/g, 'だ！')
+      .replace(/思います/g, '確信しています！')
+      .replace(/できる/g, 'できる可能性は無限大')
+      .replace(/する/g, 'する！');
+  },
+  technical: (t) => {
+    return t
+      .replace(/つまり/g, 'すなわち')
+      .replace(/だから/g, 'したがって')
+      .replace(/でも/g, 'しかしながら')
+      .replace(/いいか悪いか/g, '有効性の評価指標として')
+      .replace(/やる/g, '実装する')
+      .replace(/使う/g, '活用する')
+      .replace(/良い/g, '最適化された')
+      .replace(/速い/g, '高スループット')
+      .replace(/大きい/g, 'スケーラブルな')
+      .replace(/変わる/g, '最適化プロセスが進む')
+      .replace(/思います/g, '分析結果が示唆します');
+  }
+};
+
+function computeDiff(original, converted) {
+  const origWords = original.split(/(?<=[。、！？\s])/);
+  const convWords = converted.split(/(?<=[。、！？\s])/);
+  let html = '';
+  const maxLen = Math.max(origWords.length, convWords.length);
+  for (let i = 0; i < maxLen; i++) {
+    const o = origWords[i] || '';
+    const c = convWords[i] || '';
+    if (o === c) {
+      html += escapeHtml(c);
+    } else {
+      if (o) html += '<span class="bg-red-100 text-red-700 line-through px-0.5 rounded">' + escapeHtml(o) + '</span>';
+      if (c) html += '<span class="bg-green-100 text-green-700 px-0.5 rounded">' + escapeHtml(c) + '</span>';
+    }
+  }
+  return html;
+}
+
+document.querySelectorAll('.tone-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const tone = btn.dataset.tone;
+    const original = inputEl.value.trim();
+    if (!original) { alert('変換する文章を入力してください'); return; }
+    const rule = TONE_RULES[tone];
+    const converted = rule(original);
+    document.getElementById('result-panel').classList.remove('hidden');
+    document.getElementById('tone-label').textContent = TONE_LABELS[tone];
+    document.getElementById('result-text').textContent = converted;
+    document.getElementById('diff-view').innerHTML = computeDiff(original, converted); // xss-ok: computeDiff() builds HTML using escapeHtml() on all user-entered text
+  });
+});
+
+document.getElementById('copy-result-btn').addEventListener('click', () => {
+  const txt = document.getElementById('result-text').textContent;
+  navigator.clipboard.writeText(txt).then(() => {
+    document.getElementById('copy-result-btn').textContent = 'コピー済！';
+    setTimeout(() => { document.getElementById('copy-result-btn').textContent = 'コピー'; }, 2000);
+  });
+});
+</script>
+</body>
+</html>
